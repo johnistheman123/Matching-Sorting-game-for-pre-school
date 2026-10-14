@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preschool Color & Shape Sorter</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        canvas {
+            background-color: #ffffff;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Colors
+        const WHITE = "#FFFFFF";
+        const BLACK = "#222222";
+        const rainbowColors = [
+            { name: "Red", color: "#EB5757" },
+            { name: "Orange", color: "#F2994A" },
+            { name: "Yellow", color: "#F2C94C" },
+            { name: "Green", color: "#27AE60" },
+            { name: "Blue", color: "#2D9CDB" },
+            { name: "Indigo", color: "#5B50A1" },
+            { name: "Violet", color: "#9B51E0" }
+        ];
+
+        // Target Drop Zones
+        const zones = rainbowColors.map((item, index) => ({
+            name: item.name,
+            color: item.color,
+            x: 25 + index * 107,
+            y: 420,
+            width: 95,
+            height: 140
+        }));
+
+        // Draggable Shapes are intentionally in a different order from the zones.
+        const shapeOrder = [3, 0, 5, 2, 6, 1, 4];
+        const shapes = shapeOrder.map((colorIndex, index) => {
+            const item = rainbowColors[colorIndex];
+            const x = 25 + index * 107;
+            return {
+                name: item.name,
+                color: item.color,
+                targetColor: item.color,
+                x,
+                y: 140,
+                initialX: x,
+                initialY: 140,
+                width: 95,
+                height: 60,
+                isMatched: false,
+                isDragging: false
+            };
+        });
+
+        let activeShape = null;
+        let offsetX = 0;
+        let offsetY = 0;
+        let score = 0;
+
+        // Helper function to draw rounded rectangles
+        function drawRoundedRect(x, y, width, height, radius, fillColor, strokeColor, lineWidth = 0) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, width, height, radius);
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+            if (lineWidth > 0) {
+                ctx.lineWidth = lineWidth;
+                ctx.strokeStyle = strokeColor;
+                ctx.stroke();
+            }
+        }
+
+        // Mouse & Touch Event Handlers
+        function getPointerPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function onPointerDown(e) {
+            const pos = getPointerPos(e);
+            for (let shape of shapes) {
+                if (!shape.isMatched && 
+                    pos.x >= shape.x && pos.x <= shape.x + shape.width &&
+                    pos.y >= shape.y && pos.y <= shape.y + shape.height) {
+                    activeShape = shape;
+                    shape.isDragging = true;
+                    offsetX = shape.x - pos.x;
+                    offsetY = shape.y - pos.y;
+                    break;
+                }
+            }
+        }
+
+        function onPointerMove(e) {
+            if (activeShape && activeShape.isDragging) {
+                const pos = getPointerPos(e);
+                activeShape.x = pos.x + offsetX;
+                activeShape.y = pos.y + offsetY;
+            }
+        }
+
+        function onPointerUp() {
+            if (activeShape) {
+                activeShape.isDragging = false;
+                let matched = false;
+
+                // Check collision with matching zone
+                for (let zone of zones) {
+                    if (zone.color === activeShape.targetColor) {
+                        // Check if center of shape is inside zone bounds
+                        let centerX = activeShape.x + activeShape.width / 2;
+                        let centerY = activeShape.y + activeShape.height / 2;
+
+                        if (centerX >= zone.x && centerX <= zone.x + zone.width &&
+                            centerY >= zone.y && centerY <= zone.y + zone.height) {
+                            activeShape.isMatched = true;
+                            score++;
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!matched) {
+                    // Snap back if dropped incorrectly
+                    activeShape.x = activeShape.initialX;
+                    activeShape.y = activeShape.initialY;
+                }
+
+                activeShape = null;
+            }
+        }
+
+        // Bind events for both mouse and touchscreens
+        canvas.addEventListener("mousedown", onPointerDown);
+        window.addEventListener("mousemove", onPointerMove);
+        window.addEventListener("mouseup", onPointerUp);
+
+        canvas.addEventListener("touchstart", (e) => { onPointerDown(e); e.preventDefault(); });
+        window.addEventListener("touchmove", (e) => { onPointerMove(e); e.preventDefault(); });
+        window.addEventListener("touchend", onPointerUp);
+
+        // Main Game Loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Title
+            ctx.fillStyle = BLACK;
+            ctx.font = "bold 32px system-ui, sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("Match each block to its color!", canvas.width / 2, 60);
+
+            // 2. Draw Target Zones
+            for (let zone of zones) {
+                drawRoundedRect(zone.x, zone.y, zone.width, zone.height, 16, zone.color, BLACK, 4);
+                
+                ctx.fillStyle = zone.color === "#F2C94C" ? BLACK : WHITE;
+                ctx.font = "bold 20px system-ui, sans-serif";
+                ctx.fillText(zone.name, zone.x + zone.width / 2, zone.y + zone.height / 2 + 7);
+            }
+
+            // 3. Draw Shapes
+            for (let shape of shapes) {
+                if (shape.isMatched) continue;
+
+                drawRoundedRect(shape.x, shape.y, shape.width, shape.height, 12, shape.color, BLACK, 3);
+
+                ctx.fillStyle = shape.color === "#F2C94C" ? BLACK : WHITE;
+                ctx.font = "bold 16px system-ui, sans-serif";
+                ctx.fillText(shape.name, shape.x + shape.width / 2, shape.y + shape.height / 2 + 6);
+            }
+
+            // 4. Check Win Condition
+            if (score === shapes.length) {
+                ctx.fillStyle = rainbowColors[3].color;
+                ctx.font = "bold 40px system-ui, sans-serif";
+                ctx.fillText("Great Job! You did it! 🎉", canvas.width / 2, 260);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start animation loop
+        gameLoop();
+    </script>
+</body>
+</html>
